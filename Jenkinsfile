@@ -1,0 +1,102 @@
+pipeline {
+    agent any
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+    }
+    environment {
+        WORKSPACE = "${env.WORKSPACE}"
+    }
+    stages {
+        stage('Detect Changes') {
+            steps {
+                script {
+                    // print branch name
+                    echo "hihi running pipeline for Branch    : ${env.BRANCH_NAME}"
+
+                    // Get changed files between current and previous commit
+                    def changedFiles = sh(script: "git diff --name-only HEAD~1 HEAD", returnStdout: true).trim()
+                    // Define service directories to monitor
+                    def services = [
+                        'spring-petclinic-admin-server',
+                        'spring-petclinic-api-gateway',
+                        'spring-petclinic-config-server',
+                        'spring-petclinic-customers-service',
+                        'spring-petclinic-discovery-server',
+                        'spring-petclinic-genai-service',
+                        'spring-petclinic-vets-service',
+                        'spring-petclinic-visits-service'
+                    ]
+                    // Identify which services have changes
+                    env.CHANGED_SERVICES = ""
+                    for (service in services) {
+                        if (changedFiles.contains(service)) {
+                            env.CHANGED_SERVICES = env.CHANGED_SERVICES + " " + service
+                        }
+                    }
+                    // If no specific service changes detected, check for common changes
+                    if (env.CHANGED_SERVICES == "") {
+                        if (changedFiles.contains("pom.xml") || 
+                            changedFiles.contains(".github") || 
+                            changedFiles.contains("docker-compose") ||
+                            changedFiles.contains("Jenkinsfile")) {
+                            echo "Common files changed, will build all services"
+                            env.CHANGED_SERVICES = services.join(" ")
+                        } else {
+                            echo "No relevant changes detected"
+                        }
+                    }
+                    
+                    echo "Services to build: ${env.CHANGED_SERVICES}"
+                }
+            }
+        }
+        
+        stage('Test Services') {
+            when {
+                expression { return env.CHANGED_SERVICES != "" }
+            }
+            steps {
+                script {
+                    def serviceList = env.CHANGED_SERVICES.trim().split(" ")
+                    for (service in serviceList) {
+                        echo "Testing service: ${service}"
+                        dir(service) {
+                            sh 'mvn clean test'
+                            // Publish test results
+                            junit '**/target/surefire-reports/*.xml'
+                            // Publish coverage reports
+                            jacoco(
+                                execPattern: '**/target/jacoco.exec',
+                                classPattern: '**/target/classes',
+                                sourcePattern: '**/src/main/java',
+                                exclusionPattern: '**/src/test*'
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        stage('Build Services') {
+            when {
+                expression { return env.CHANGED_SERVICES != "" }
+            }
+            steps {
+                script {
+                    def serviceList = env.CHANGED_SERVICES.trim().split(" ")
+                    for (service in serviceList) {
+                        echo "Building service: ${service}"
+                        dir(service) {
+                            sh 'mvn package -DskipTests'
+                            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
+                        }
+                    }
+                }
+            }
+        }
+    }
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
