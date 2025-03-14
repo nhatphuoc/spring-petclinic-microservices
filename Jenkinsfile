@@ -5,15 +5,13 @@ pipeline {
     }
     environment {
         WORKSPACE = "${env.WORKSPACE}"
-        // List of services without test folders
-        SERVICES_WITHOUT_TESTS = "spring-petclinic-admin-server spring-petclinic-genai-service"
     }
     stages {
         stage('Detect Changes') {
             steps {
                 script {
                     // print branch name
-                    echo "Running pipeline for Branch : ${env.BRANCH_NAME}"
+                    echo "running pipeline for Branch    : ${env.BRANCH_NAME}"
 
                     // Get changed files between current and previous commit
                     def changedFiles = sh(script: "git diff --name-only HEAD~1 HEAD", returnStdout: true).trim()
@@ -63,28 +61,16 @@ pipeline {
                     for (service in serviceList) {
                         echo "Testing service: ${service}"
                         dir(service) {
-                            // Check if the service has tests
-                            if (!env.SERVICES_WITHOUT_TESTS.contains(service)) {
-                                try {
-                                    sh 'mvn clean test'
-                                    
-                                    // Publish test results
-                                    junit allowEmptyResults: true, testResults: '**/target/surefire-reports/*.xml'
-                                    
-                                    // Publish coverage reports
-                                    jacoco(
-                                        execPattern: '**/target/jacoco.exec',
-                                        classPattern: '**/target/classes',
-                                        sourcePattern: '**/src/main/java',
-                                        exclusionPattern: '**/src/test*'
-                                    )
-                                } catch (Exception e) {
-                                    echo "Warning: Tests failed for ${service}, but continuing pipeline"
-                                    currentBuild.result = 'UNSTABLE'
-                                }
-                            } else {
-                                echo "Skipping tests for ${service} as it does not have test folders"
-                            }
+                            sh 'mvn clean test'
+                            // Publish test results
+                            junit '**/target/surefire-reports/*.xml'
+                            // Publish coverage reports
+                            jacoco(
+                                execPattern: '**/target/jacoco.exec',
+                                classPattern: '**/target/classes',
+                                sourcePattern: '**/src/main/java',
+                                exclusionPattern: '**/src/test*'
+                            )
                         }
                     }
                 }
