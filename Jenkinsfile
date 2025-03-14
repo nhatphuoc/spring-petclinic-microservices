@@ -232,6 +232,37 @@ pipeline {
                 }
             }
         }
+        
+        stage('Test Coverage') {
+            steps {
+                script {
+                    def services = [
+                        'spring-petclinic-api-gateway',
+                        'spring-petclinic-config-server',
+                        'spring-petclinic-customers-service',
+                        'spring-petclinic-discovery-server',
+                        'spring-petclinic-vets-service',
+                        'spring-petclinic-visits-service'
+                    ]
+                    
+                    for (service in services) {
+                        if (!env.SERVICES_WITHOUT_TESTS.contains(service)) {
+                            echo "Testing service: ${service}"
+                            dir(service) {
+                                sh 'mvn clean verify'
+                                jacoco(
+                                    execPattern: 'target/jacoco.exec',
+                                    classPattern: 'target/classes',
+                                    sourcePattern: 'src/main/java',
+                                    inclusionPattern: '**/*.class',
+                                    exclusionPattern: 'src/test*,**/*DTO*,**/*Config*'
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
     stage('Verify Changes') {
         steps {
@@ -280,6 +311,33 @@ pipeline {
         }
         always {
             cleanWs()
+            // Publish JaCoCo report for each service
+            script {
+                def services = [
+                    'spring-petclinic-api-gateway',
+                    'spring-petclinic-config-server',
+                    'spring-petclinic-customers-service',
+                    'spring-petclinic-discovery-server',
+                    'spring-petclinic-vets-service',
+                    'spring-petclinic-visits-service'
+                ]
+                
+                services.each { service ->
+                    if (!env.SERVICES_WITHOUT_TESTS.contains(service)) {
+                        def reportPath = "${service}/target/site/jacoco/index.html"
+                        if (fileExists(reportPath)) {
+                            publishHTML([
+                                allowMissing: false,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: "${service}/target/site/jacoco",
+                                reportFiles: 'index.html',
+                                reportName: "${service} - JaCoCo Coverage Report"
+                            ])
+                        }
+                    }
+                }
+            }
         }
     }
 }
