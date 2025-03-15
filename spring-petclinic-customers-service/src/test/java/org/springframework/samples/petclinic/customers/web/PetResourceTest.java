@@ -140,6 +140,48 @@ class PetResourceTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void shouldValidateInvalidPetName() throws Exception {
+        mvc.perform(post("/owners/2/pets")
+                .content("{\n" +
+                        "  \"name\": \"\",\n" +
+                        "  \"birthDate\": \"2021-09-07\",\n" +
+                        "  \"typeId\": 6\n" +
+                        "}")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldValidateInvalidBirthDate() throws Exception {
+        mvc.perform(post("/owners/2/pets")
+                .content("{\n" +
+                        "  \"name\": \"Basil\",\n" +
+                        "  \"birthDate\": \"invalid-date\",\n" +
+                        "  \"typeId\": 6\n" +
+                        "}")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnNotFoundForNonExistingPetType() throws Exception {
+        Owner owner = new Owner();
+        owner.setId(2);
+        
+        given(ownerRepository.findById(2)).willReturn(Optional.of(owner));
+        given(petRepository.findPetTypeById(999)).willReturn(Optional.empty());
+
+        mvc.perform(post("/owners/2/pets")
+                .content("{\n" +
+                        "  \"name\": \"Basil\",\n" +
+                        "  \"birthDate\": \"2021-09-07\",\n" +
+                        "  \"typeId\": 999\n" +
+                        "}")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound());
+    }
+
     private Pet setupPet() {
         Owner owner = new Owner();
         owner.setFirstName("George");
