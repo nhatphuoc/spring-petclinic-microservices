@@ -16,6 +16,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 import java.net.ConnectException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -33,7 +34,6 @@ class ApiGatewayControllerTest {
 
     @Autowired
     private WebTestClient client;
-
 
     @Test
     void getOwnerDetails_withAvailableVisitsService() {
@@ -94,4 +94,78 @@ class ApiGatewayControllerTest {
             .jsonPath("$.pets[0].visits").isEmpty();
     }
 
+    @Test
+    void getOwnerDetails_whenCustomerServiceIsDown() {
+        Mockito
+            .when(customersServiceClient.getOwner(1))
+            .thenReturn(Mono.error(new ConnectException("Customer service is down")));
+
+        client.get()
+            .uri("/api/gateway/owners/1")
+            .exchange()
+            .expectStatus().is5xxServerError();
+    }
+
+    @Test
+    void getOwnerDetails_whenCustomerServiceTimeout() {
+        Mockito
+            .when(customersServiceClient.getOwner(1))
+            .thenReturn(Mono.delay(Duration.ofSeconds(10)).then(Mono.empty()));
+
+        client.get()
+            .uri("/api/gateway/owners/1")
+            .exchange()
+            .expectStatus().is5xxServerError();
+    }
+
+    @Test
+    void getOwnerDetails_whenOwnerNotFound() {
+        Mockito
+            .when(customersServiceClient.getOwner(999))
+            .thenReturn(Mono.empty());
+
+        client.get()
+            .uri("/api/gateway/owners/999")
+            .exchange()
+            .expectStatus().isNotFound();
+    }
+
+    @Test
+    void getOwnerDetails_withMultiplePets() {
+        PetDetails cat = PetDetails.PetDetailsBuilder.aPetDetails()
+            .id(20)
+            .name("Garfield")
+            .visits(new ArrayList<>())
+            .build();
+        PetDetails dog = PetDetails.PetDetailsBuilder.aPetDetails()
+            .id(21)
+            .name("Odie")
+            .visits(new ArrayList<>())
+            .build();
+        OwnerDetails owner = OwnerDetails.OwnerDetailsBuilder.anOwnerDetails()
+            .pets(List.of(cat, dog))
+            .build();
+
+        Mockito
+            .when(customersServiceClient.getOwner(1))
+            .thenReturn(Mono.just(owner));
+
+        VisitDetails catVisit = new VisitDetails(300, cat.id(), null, "Cat visit");
+        VisitDetails dogVisit = new VisitDetails(301, dog.id(), null, "Dog visit");
+        Visits visits = new Visits(List.of(catVisit, dogVisit));
+
+        Mockito
+            .when(visitsServiceClient.getVisitsForPets(List.of(cat.id(), dog.id())))
+            .thenReturn(Mono.just(visits));
+
+        client.get()
+            .uri("/api/gateway/owners/1")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.pets[0].name").isEqualTo("Garfield")
+            .jsonPath("$.pets[1].name").isEqualTo("Odie")
+            .jsonPath("$.pets[0].visits[0].description").isEqualTo("Cat visit")
+            .jsonPath("$.pets[1].visits[0].description").isEqualTo("Dog visit");
+    }
 }
