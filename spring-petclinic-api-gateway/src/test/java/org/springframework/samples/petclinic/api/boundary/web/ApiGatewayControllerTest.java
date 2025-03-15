@@ -51,9 +51,7 @@ class ApiGatewayControllerTest {
     @Test
     void shouldGetOwnerDetails() {
         // Arrange
-        PetType dogType = new PetType();
-        dogType.setId(1);
-        dogType.setName("Dog");
+        PetType dogType = new PetType("Dog");
 
         PetDetails pet = new PetDetails(1, "Max", "2020-01-01", dogType, List.of());
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
@@ -93,9 +91,7 @@ class ApiGatewayControllerTest {
     @Test
     void shouldHandleVisitsServiceFailure() {
         // Arrange
-        PetType dogType = new PetType();
-        dogType.setId(1);
-        dogType.setName("Dog");
+        PetType dogType = new PetType("Dog");
 
         PetDetails pet = new PetDetails(1, "Max", "2020-01-01", dogType, List.of());
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
@@ -105,7 +101,7 @@ class ApiGatewayControllerTest {
         given(visitsServiceClient.getVisitsForPets(List.of(1))).willReturn(Mono.error(new RuntimeException("Service unavailable")));
         given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> {
             Mono<?> mono = invocation.getArgument(0);
-            Function<Throwable, Mono<Visits>> fallback = invocation.getArgument(1);
+            Function<? super Throwable, ? extends Mono<?>> fallback = invocation.getArgument(1);
             return mono.onErrorResume(fallback);
         });
 
@@ -122,13 +118,8 @@ class ApiGatewayControllerTest {
     @Test
     void shouldReturnOwnerWithMultiplePetsAndVisits() {
         // Arrange
-        PetType dogType = new PetType();
-        dogType.setId(1);
-        dogType.setName("Dog");
-
-        PetType catType = new PetType();
-        catType.setId(2);
-        catType.setName("Cat");
+        PetType dogType = new PetType("Dog");
+        PetType catType = new PetType("Cat");
 
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
             List.of(
