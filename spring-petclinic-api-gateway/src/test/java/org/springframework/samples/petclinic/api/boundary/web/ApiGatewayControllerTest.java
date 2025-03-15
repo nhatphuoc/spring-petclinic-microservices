@@ -1,29 +1,36 @@
 package org.springframework.samples.petclinic.api.boundary.web;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JAutoConfiguration;
-import org.springframework.context.annotation.Import;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreaker;
+import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
 import org.springframework.samples.petclinic.api.application.CustomersServiceClient;
 import org.springframework.samples.petclinic.api.application.VisitsServiceClient;
-import org.springframework.samples.petclinic.api.dto.*;
+import org.springframework.samples.petclinic.api.dto.OwnerDetails;
+import org.springframework.samples.petclinic.api.dto.PetDetails;
+import org.springframework.samples.petclinic.api.dto.VisitDetails;
+import org.springframework.samples.petclinic.api.dto.Visits;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
-import java.net.ConnectException;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.BDDMockito.given;
+import static org.mockito.ArgumentMatchers.any;
+
 @ExtendWith(SpringExtension.class)
-@WebFluxTest(controllers = ApiGatewayController.class)
-@Import({ReactiveResilience4JAutoConfiguration.class, CircuitBreakerConfiguration.class})
+@WebFluxTest(ApiGatewayController.class)
+@ActiveProfiles("test")
 class ApiGatewayControllerTest {
+
+    @Autowired
+    private WebTestClient webClient;
 
     @MockBean
     private CustomersServiceClient customersServiceClient;
@@ -31,67 +38,103 @@ class ApiGatewayControllerTest {
     @MockBean
     private VisitsServiceClient visitsServiceClient;
 
-    @Autowired
-    private WebTestClient client;
+    @MockBean
+    private ReactiveCircuitBreakerFactory circuitBreakerFactory;
 
+    @MockBean
+    private ReactiveCircuitBreaker circuitBreaker;
 
-    @Test
-    void getOwnerDetails_withAvailableVisitsService() {
-        PetDetails cat = PetDetails.PetDetailsBuilder.aPetDetails()
-            .id(20)
-            .name("Garfield")
-            .visits(new ArrayList<>())
-            .build();
-        OwnerDetails owner = OwnerDetails.OwnerDetailsBuilder.anOwnerDetails()
-            .pets(List.of(cat))
-            .build();
-        Mockito
-            .when(customersServiceClient.getOwner(1))
-            .thenReturn(Mono.just(owner));
-
-        VisitDetails visit = new VisitDetails(300, cat.id(), null, "First visit");
-        Visits visits = new Visits(List.of(visit));
-        Mockito
-            .when(visitsServiceClient.getVisitsForPets(Collections.singletonList(cat.id())))
-            .thenReturn(Mono.just(visits));
-
-        client.get()
-            .uri("/api/gateway/owners/1")
-            .exchange()
-            .expectStatus().isOk()
-            .expectBody()
-            .jsonPath("$.pets[0].name").isEqualTo("Garfield")
-            .jsonPath("$.pets[0].visits[0].description").isEqualTo("First visit");
+    @BeforeEach
+    void setup() {
+        given(circuitBreakerFactory.create(any(String.class))).willReturn(circuitBreaker);
+        given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> invocation.getArgument(0));
     }
 
-    /**
-     * Test Resilience4j fallback method
-     */
     @Test
-    void getOwnerDetails_withServiceError() {
-        PetDetails cat = PetDetails.PetDetailsBuilder.aPetDetails()
-            .id(20)
-            .name("Garfield")
-            .visits(new ArrayList<>())
-            .build();
-        OwnerDetails owner = OwnerDetails.OwnerDetailsBuilder.anOwnerDetails()
-            .pets(List.of(cat))
-            .build();
-        Mockito
-            .when(customersServiceClient.getOwner(1))
-            .thenReturn(Mono.just(owner));
+    void shouldGetOwnerDetails() {
+        // Arrange
+        OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
+            List.of(new PetDetails(1, "Max", "2020-01-01", "Dog", List.of())));
 
-        Mockito
-            .when(visitsServiceClient.getVisitsForPets(Collections.singletonList(cat.id())))
-            .thenReturn(Mono.error(new ConnectException("Simulate error")));
+        Visits visits = new Visits(List.of(
+            new VisitDetails(1, 1, "2023-01-01", "Regular checkup")
+        ));
 
-        client.get()
+        given(customersServiceClient.getOwner(1)).willReturn(Mono.just(owner));
+        given(visitsServiceClient.getVisitsForPets(List.of(1))).willReturn(Mono.just(visits));
+
+        // Act & Assert
+        webClient.get()
             .uri("/api/gateway/owners/1")
             .exchange()
             .expectStatus().isOk()
             .expectBody()
-            .jsonPath("$.pets[0].name").isEqualTo("Garfield")
+            .jsonPath("$.id").isEqualTo(1)
+            .jsonPath("$.firstName").isEqualTo("John")
+            .jsonPath("$.lastName").isEqualTo("Doe")
+            .jsonPath("$.pets[0].visits[0].description").isEqualTo("Regular checkup");
+    }
+
+    @Test
+    void shouldHandleOwnerNotFound() {
+        // Arrange
+        given(customersServiceClient.getOwner(999)).willReturn(Mono.empty());
+
+        // Act & Assert
+        webClient.get()
+            .uri("/api/gateway/owners/999")
+            .exchange()
+            .expectStatus().isNotFound();
+    }
+
+    @Test
+    void shouldHandleVisitsServiceFailure() {
+        // Arrange
+        OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
+            List.of(new PetDetails(1, "Max", "2020-01-01", "Dog", List.of())));
+
+        given(customersServiceClient.getOwner(1)).willReturn(Mono.just(owner));
+        given(visitsServiceClient.getVisitsForPets(List.of(1))).willReturn(Mono.error(new RuntimeException("Service unavailable")));
+        given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> {
+            Mono<?> mono = invocation.getArgument(0);
+            Function<Throwable, Mono<Visits>> fallback = invocation.getArgument(1);
+            return mono.onErrorResume(fallback);
+        });
+
+        // Act & Assert
+        webClient.get()
+            .uri("/api/gateway/owners/1")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.id").isEqualTo(1)
             .jsonPath("$.pets[0].visits").isEmpty();
     }
 
+    @Test
+    void shouldReturnOwnerWithMultiplePetsAndVisits() {
+        // Arrange
+        OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
+            List.of(
+                new PetDetails(1, "Max", "2020-01-01", "Dog", List.of()),
+                new PetDetails(2, "Luna", "2021-01-01", "Cat", List.of())
+            ));
+
+        Visits visits = new Visits(List.of(
+            new VisitDetails(1, 1, "2023-01-01", "Dog checkup"),
+            new VisitDetails(2, 2, "2023-02-01", "Cat checkup")
+        ));
+
+        given(customersServiceClient.getOwner(1)).willReturn(Mono.just(owner));
+        given(visitsServiceClient.getVisitsForPets(List.of(1, 2))).willReturn(Mono.just(visits));
+
+        // Act & Assert
+        webClient.get()
+            .uri("/api/gateway/owners/1")
+            .exchange()
+            .expectStatus().isOk()
+            .expectBody()
+            .jsonPath("$.pets[0].visits[0].description").isEqualTo("Dog checkup")
+            .jsonPath("$.pets[1].visits[0].description").isEqualTo("Cat checkup");
+    }
 }
