@@ -10,16 +10,14 @@ import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreaker;
 import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
 import org.springframework.samples.petclinic.api.application.CustomersServiceClient;
 import org.springframework.samples.petclinic.api.application.VisitsServiceClient;
-import org.springframework.samples.petclinic.api.dto.OwnerDetails;
-import org.springframework.samples.petclinic.api.dto.PetDetails;
-import org.springframework.samples.petclinic.api.dto.VisitDetails;
-import org.springframework.samples.petclinic.api.dto.Visits;
+import org.springframework.samples.petclinic.api.dto.*;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.function.Function;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
@@ -53,8 +51,13 @@ class ApiGatewayControllerTest {
     @Test
     void shouldGetOwnerDetails() {
         // Arrange
+        PetType dogType = new PetType();
+        dogType.setId(1);
+        dogType.setName("Dog");
+
+        PetDetails pet = new PetDetails(1, "Max", "2020-01-01", dogType, List.of());
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
-            List.of(new PetDetails(1, "Max", "2020-01-01", "Dog", List.of())));
+            List.of(pet));
 
         Visits visits = new Visits(List.of(
             new VisitDetails(1, 1, "2023-01-01", "Regular checkup")
@@ -90,8 +93,13 @@ class ApiGatewayControllerTest {
     @Test
     void shouldHandleVisitsServiceFailure() {
         // Arrange
+        PetType dogType = new PetType();
+        dogType.setId(1);
+        dogType.setName("Dog");
+
+        PetDetails pet = new PetDetails(1, "Max", "2020-01-01", dogType, List.of());
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
-            List.of(new PetDetails(1, "Max", "2020-01-01", "Dog", List.of())));
+            List.of(pet));
 
         given(customersServiceClient.getOwner(1)).willReturn(Mono.just(owner));
         given(visitsServiceClient.getVisitsForPets(List.of(1))).willReturn(Mono.error(new RuntimeException("Service unavailable")));
@@ -114,10 +122,18 @@ class ApiGatewayControllerTest {
     @Test
     void shouldReturnOwnerWithMultiplePetsAndVisits() {
         // Arrange
+        PetType dogType = new PetType();
+        dogType.setId(1);
+        dogType.setName("Dog");
+
+        PetType catType = new PetType();
+        catType.setId(2);
+        catType.setName("Cat");
+
         OwnerDetails owner = new OwnerDetails(1, "John", "Doe", "123 Street", "City", "123456789",
             List.of(
-                new PetDetails(1, "Max", "2020-01-01", "Dog", List.of()),
-                new PetDetails(2, "Luna", "2021-01-01", "Cat", List.of())
+                new PetDetails(1, "Max", "2020-01-01", dogType, List.of()),
+                new PetDetails(2, "Luna", "2021-01-01", catType, List.of())
             ));
 
         Visits visits = new Visits(List.of(
