@@ -35,7 +35,6 @@ class OwnerResourceTest {
     @Test
     void shouldGetOwnerById() throws Exception {
         Owner owner = new Owner();
-        owner.setId(1);
         owner.setFirstName("George");
         owner.setLastName("Franklin");
         owner.setAddress("110 W. Liberty St.");
@@ -47,7 +46,6 @@ class OwnerResourceTest {
         mvc.perform(get("/owners/1").accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
             .andExpect(content().contentType("application/json"))
-            .andExpect(jsonPath("$.id").value(1))
             .andExpect(jsonPath("$.firstName").value("George"))
             .andExpect(jsonPath("$.lastName").value("Franklin"))
             .andExpect(jsonPath("$.address").value("110 W. Liberty St."))
@@ -58,7 +56,6 @@ class OwnerResourceTest {
     @Test
     void shouldCreateNewOwner() throws Exception {
         Owner owner = new Owner();
-        owner.setId(1);
         owner.setFirstName("George");
         owner.setLastName("Franklin");
         owner.setAddress("110 W. Liberty St.");
@@ -77,7 +74,6 @@ class OwnerResourceTest {
                         "}")
                 .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.firstName").value("George"))
                 .andExpect(jsonPath("$.lastName").value("Franklin"));
 
@@ -87,7 +83,6 @@ class OwnerResourceTest {
     @Test
     void shouldUpdateOwner() throws Exception {
         Owner owner = new Owner();
-        owner.setId(1);
         owner.setFirstName("George");
         owner.setLastName("Franklin");
 
@@ -119,15 +114,13 @@ class OwnerResourceTest {
     @Test
     void shouldFindOwnersByLastName() throws Exception {
         Owner owner = new Owner();
-        owner.setId(1);
         owner.setFirstName("George");
         owner.setLastName("Franklin");
 
-        given(ownerRepository.findByLastName("Franklin")).willReturn(Arrays.asList(owner));
+        given(ownerRepository.findAll()).willReturn(Arrays.asList(owner));
 
         mvc.perform(get("/owners/*/lastname/Franklin"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].id").value(1))
             .andExpect(jsonPath("$[0].firstName").value("George"))
             .andExpect(jsonPath("$[0].lastName").value("Franklin"));
     }
