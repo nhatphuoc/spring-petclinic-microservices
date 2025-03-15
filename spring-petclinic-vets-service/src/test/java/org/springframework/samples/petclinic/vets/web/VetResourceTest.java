@@ -28,7 +28,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -48,25 +50,71 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class VetResourceTest {
 
     @Autowired
-    MockMvc mvc;
+    private MockMvc mvc;
 
     @MockBean
-    VetRepository vetRepository;
+    private VetRepository vetRepository;
 
     @Test
-    void shouldGetAListOfVets() throws Exception {
-        Vet vet = new Vet();
-        vet.setId(1);
-        vet.setFirstName("James");
-        vet.setLastName("Carter");
-
-        given(vetRepository.findAll()).willReturn(asList(vet));
+    void shouldGetAListOfVetsInJSonFormat() throws Exception {
+        Vet vet = setupVet();
+        List<Vet> vets = asList(vet);
+        given(vetRepository.findAll()).willReturn(vets);
 
         mvc.perform(get("/vets").accept(MediaType.APPLICATION_JSON))
             .andExpect(status().isOk())
+            .andExpect(content().contentType("application/json"))
+            .andExpect(jsonPath("$.vetList[0].id").value(1))
+            .andExpect(jsonPath("$.vetList[0].firstName").value("James"))
+            .andExpect(jsonPath("$.vetList[0].lastName").value("Carter"))
+            .andExpect(jsonPath("$.vetList[0].specialties[0].name").value("radiology"));
+    }
+
+    @Test
+    void shouldGetEmptyListOfVets() throws Exception {
+        given(vetRepository.findAll()).willReturn(Arrays.asList());
+
+        mvc.perform(get("/vets").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("application/json"))
+            .andExpect(jsonPath("$.vetList").isEmpty());
+    }
+
+    @Test
+    void shouldGetVetsBySpecialty() throws Exception {
+        Vet vet = setupVet();
+        List<Vet> vets = asList(vet);
+        given(vetRepository.findBySpecialty("radiology")).willReturn(vets);
+
+        mvc.perform(get("/vets/specialty/radiology").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("application/json"))
+            .andExpect(jsonPath("$.vetList[0].specialties[0].name").value("radiology"));
+    }
+
+    @Test
+    void shouldReturnEmptyListForUnknownSpecialty() throws Exception {
+        given(vetRepository.findBySpecialty("unknown")).willReturn(Arrays.asList());
+
+        mvc.perform(get("/vets/specialty/unknown").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("application/json"))
+            .andExpect(jsonPath("$.vetList").isEmpty());
+    }
+
+    @Test
+    void shouldReturnAllSpecialties() throws Exception {
+        Specialty specialty = new Specialty();
+        specialty.setId(1);
+        specialty.setName("radiology");
+        List<Specialty> specialties = asList(specialty);
+        given(vetRepository.findAllSpecialties()).willReturn(specialties);
+
+        mvc.perform(get("/vets/specialties").accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(content().contentType("application/json"))
             .andExpect(jsonPath("$[0].id").value(1))
-            .andExpect(jsonPath("$[0].firstName").value("James"))
-            .andExpect(jsonPath("$[0].lastName").value("Carter"));
+            .andExpect(jsonPath("$[0].name").value("radiology"));
     }
 
     @Test
@@ -167,5 +215,17 @@ class VetResourceTest {
             .andExpect(status().isNoContent());
 
         verify(vetRepository).delete(vet);
+    }
+
+    private Vet setupVet() {
+        Vet vet = new Vet();
+        vet.setId(1);
+        vet.setFirstName("James");
+        vet.setLastName("Carter");
+        Specialty specialty = new Specialty();
+        specialty.setId(1);
+        specialty.setName("radiology");
+        vet.setSpecialties(new HashSet<>(asList(specialty)));
+        return vet;
     }
 }

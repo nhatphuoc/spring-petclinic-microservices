@@ -16,22 +16,22 @@
 package org.springframework.samples.petclinic.config;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.cloud.config.environment.Environment;
 import org.springframework.cloud.config.server.environment.EnvironmentRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(SpringExtension.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@ActiveProfiles("test")
 class PetclinicConfigServerApplicationTests {
-
-	@LocalServerPort
-	private int port;
 
 	@Autowired
 	private TestRestTemplate restTemplate;
@@ -46,43 +46,49 @@ class PetclinicConfigServerApplicationTests {
 
 	@Test
 	void shouldRetrieveDefaultConfiguration() {
-		Environment environment = environmentRepository.findOne("application", "default", null);
-		assertThat(environment).isNotNull();
-		assertThat(environment.getName()).isEqualTo("application");
+		ResponseEntity<String> entity = restTemplate.getForEntity("/application/default", String.class);
+		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(entity.getBody()).contains("spring.jpa.hibernate.ddl-auto=none");
 	}
 
 	@Test
 	void shouldRetrieveCustomersServiceConfiguration() {
-		ResponseEntity<String> entity = restTemplate.getForEntity(
-			"http://localhost:" + port + "/customers-service/default", String.class);
-		
+		ResponseEntity<String> entity = restTemplate.getForEntity("/customers-service/default", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).contains("spring.application.name=customers-service");
 	}
 
 	@Test
 	void shouldRetrieveVetsServiceConfiguration() {
-		ResponseEntity<String> entity = restTemplate.getForEntity(
-			"http://localhost:" + port + "/vets-service/default", String.class);
-		
+		ResponseEntity<String> entity = restTemplate.getForEntity("/vets-service/default", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).contains("spring.application.name=vets-service");
 	}
 
 	@Test
 	void shouldRetrieveVisitsServiceConfiguration() {
-		ResponseEntity<String> entity = restTemplate.getForEntity(
-			"http://localhost:" + port + "/visits-service/default", String.class);
-		
+		ResponseEntity<String> entity = restTemplate.getForEntity("/visits-service/default", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(entity.getBody()).contains("spring.application.name=visits-service");
 	}
 
 	@Test
 	void shouldReturnNotFoundForNonExistingService() {
-		ResponseEntity<String> entity = restTemplate.getForEntity(
-			"http://localhost:" + port + "/non-existing-service/default", String.class);
-		
+		ResponseEntity<String> entity = restTemplate.getForEntity("/non-existing-service/default", String.class);
 		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+	}
+
+	@Test
+	void shouldRetrieveEncryptedConfiguration() {
+		ResponseEntity<String> entity = restTemplate.getForEntity("/application/cipher", String.class);
+		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(entity.getBody()).contains("spring.datasource.password={cipher}");
+	}
+
+	@Test
+	void shouldRetrieveProfileSpecificConfiguration() {
+		ResponseEntity<String> entity = restTemplate.getForEntity("/customers-service/prod", String.class);
+		assertThat(entity.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(entity.getBody()).contains("spring.profiles=prod");
 	}
 }
