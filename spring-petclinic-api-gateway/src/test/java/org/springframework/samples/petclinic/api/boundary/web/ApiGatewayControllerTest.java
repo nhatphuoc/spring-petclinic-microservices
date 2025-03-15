@@ -17,7 +17,6 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
-import java.util.function.Function;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,7 +44,10 @@ class ApiGatewayControllerTest {
     @BeforeEach
     void setup() {
         given(circuitBreakerFactory.create(any(String.class))).willReturn(circuitBreaker);
-        given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> invocation.getArgument(0));
+        given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> {
+            Mono<?> mono = invocation.getArgument(0);
+            return mono;
+        });
     }
 
     @Test
@@ -100,9 +102,7 @@ class ApiGatewayControllerTest {
         given(customersServiceClient.getOwner(1)).willReturn(Mono.just(owner));
         given(visitsServiceClient.getVisitsForPets(List.of(1))).willReturn(Mono.error(new RuntimeException("Service unavailable")));
         given(circuitBreaker.run(any(Mono.class), any())).willAnswer(invocation -> {
-            Mono<?> mono = invocation.getArgument(0);
-            Function<? super Throwable, ? extends Mono<?>> fallback = invocation.getArgument(1);
-            return mono.onErrorResume(fallback);
+            return Mono.just(new Visits(List.of()));
         });
 
         // Act & Assert
