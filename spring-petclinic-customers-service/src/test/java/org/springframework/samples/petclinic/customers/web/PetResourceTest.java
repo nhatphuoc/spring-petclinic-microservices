@@ -183,7 +183,7 @@ class PetResourceTest {
     }
 
     private Pet setupPet() {
-        Owner owner = new Owner();
+        Owner owner = new Owner(); 
         owner.setFirstName("George");
         owner.setLastName("Bush");
 
