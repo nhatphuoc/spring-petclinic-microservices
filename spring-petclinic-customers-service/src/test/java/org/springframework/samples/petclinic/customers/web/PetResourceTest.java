@@ -58,7 +58,7 @@ class PetResourceTest {
     }
 
     @Test
-    void shouldGetAPetInJSonFormat() throws Exception {
+    void shouldGetAPetInJSonFormat1() throws Exception {
 
         Pet pet = setupPet();
 
